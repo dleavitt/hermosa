@@ -58,22 +58,68 @@ function run(array $settings)
 		conf($conf_name, $conf_item);
 	}
 	
-	// replace '/' with '_' to determine the name of the function to call
-	$params = explode('/', trim(arr($_GET, '__action', 'index'), '/'));
-	$action = 'action_'.array_shift($params);
+	$method = strtoupper(arr($_REQUEST, '_method', $_SERVER['REQUEST_METHOD']));
+	$path = arr($_GET, '_path', '/');
 	
-	// get that shit out of the $_GET array
-	unset($_GET['__action']);
-	if (function_exists($action))
+	$response = route($method, $path);
+	
+	if ($response !== FALSE)
 	{
-		echo count($params) ? call_user_func_array($action, $params) : $action();
+		echo $response;
 	}
 	else
 	{
 		// if we can't find the function, do a 404 error
 		header(arr($_SERVER, 'SERVER_PROTOCOL', 'HTTP/1.1').' 404 Not Found');
-		echo 'Action: '.$action.' could not be found.';
+		echo 'Action: '.$method.' '.$path.' could not be found.';
 	}	
+}
+
+/**
+ * Add a route 
+ *
+ * @return void
+ * @author Daniel Leavitt
+ */
+function route($method, $url, $function = NULL)
+{
+	static $routes;
+	if ($function)
+	{
+		$routes[$method][$url] = $function;
+	}
+	else
+	{
+		if (isset($routes[$method])) foreach ($routes[$method] as $pattern => $function)
+		{
+			if (preg_match("|$pattern|i", $url, $params))
+			{
+				array_shift($params);
+				return count($params) ? call_user_func_array($function, $params) : $function();
+			}
+		}
+		return FALSE;
+	}
+}
+
+function get($pattern, $function)
+{
+	route('GET', $pattern, $function);
+}
+
+function post($pattern, $function)
+{
+	route('POST', $pattern, $function);
+}
+
+function put($pattern, $function)
+{
+	route('PUT', $pattern, $function);
+}
+
+function delete($pattern, $function)
+{
+	route('DELETE', $pattern, $function);
 }
 
 /**
