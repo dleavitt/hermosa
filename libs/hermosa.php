@@ -93,7 +93,8 @@ function env($new_env = NULL)
  * Get or set a config variable. Supplying an array allows
  * multilevel queries of the config object.
  * 
- * @param string name of the config variable to set or get
+ * @param string name of the config variable to set or get. pass an array (or 
+ * string delimited with ".") to get nested items
  * @param value if set, sets the config variable to this value
  * @return value value of the config variable
  */
@@ -102,6 +103,11 @@ function conf($key, $value = NULL)
 	static $conf;
 	if ($value === NULL)
 	{
+		// allow "dot" syntax for nested params
+		if (strpos($key, '.'))
+		{
+			$key = explode('.', $key);
+		}
 		if (is_array($key))
 		{
 			$arr = conf(array_shift($key));
