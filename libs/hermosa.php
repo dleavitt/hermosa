@@ -59,14 +59,14 @@ function run(array $settings)
 	}
 	
 	// replace '/' with '_' to determine the name of the function to call
-	$action = 'action_'.str_replace('/', '_', trim(arr($_GET, '__action', 'index'), '/'));
+	$params = explode('/', trim(arr($_GET, '__action', 'index'), '/'));
+	$action = 'action_'.array_shift($params);
 	
 	// get that shit out of the $_GET array
 	unset($_GET['__action']);
-	
 	if (function_exists($action))
 	{
-		echo $action();
+		echo count($params) ? call_user_func_array($action, $params) : $action();
 	}
 	else
 	{
@@ -113,7 +113,15 @@ function conf($key, $value = NULL)
 		}
 		else
 		{
-			return arr($conf[$key], env(), arr($conf[$key], 'default'));
+			if (is_array($conf[$key]))
+			{
+				return arr($conf[$key], env(), arr($conf[$key], 'default'));
+			}
+			else
+			{
+				return $conf[$key];
+			}
+			
 		}
 		
 	}
@@ -213,14 +221,17 @@ function cache_delete($slug)
  * @param array vars to pass to template
  * @return string content of rendered template
  */
-function render($template, $vars = array())
+function render($template, $vars = array(), $buffer = TRUE)
 {
 	extract($vars);
-	ob_start();
+	if ($buffer) ob_start();
 	include($template.'.php');
-	$contents = ob_get_contents();
-	ob_end_clean();
-	return $contents;
+	if ($buffer) 
+	{
+		$contents = ob_get_contents();
+		ob_end_clean();
+		return $contents;
+	}
 }
 
 /**
@@ -232,7 +243,12 @@ function render($template, $vars = array())
  */
 function send_response($status, $data = array())
 {
-	return json_encode(array('status' => $status, 'data' => $data));
+	$json = str_replace('\\/', '/', json_encode(array('status' => $status, 'data' => $data)));
+	if ($callback = arr($_REQUEST, 'callback'))
+	{
+		$json = $callback.'('.$json.')';
+	}
+	return $json;
 }
 
 //---------------------------------------
