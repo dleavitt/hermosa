@@ -25,6 +25,14 @@ $settings = array(
 				'pass' => ''
 			),
 		),
+		'auth' => array(
+			'default' => array(
+				'realm' => 'Test Realm',
+				'accounts' => array(
+					'test' => 'test',
+				),
+			),
+		)
 	),
 );
 
@@ -35,12 +43,20 @@ $settings = array(
 // TOP 10 LIST
 function action_index()
 {
-	$pdo = pdo_connect();
+	return conf('db.host');
+	// $pdo = pdo_connect();
+	// 
+	// $query = $pdo->prepare("SELECT * FROM scores ORDER BY score DESC, id DESC LIMIT 10");
+	// $query->setFetchMode(PDO::FETCH_ASSOC);
+	// $status = $query->execute();
+	// return send_response(TRUE, $query->fetchAll());
+}
+
+function action_restricted()
+{
+	$user = basic_auth('test2');
+	return $user;
 	
-	$query = $pdo->prepare("SELECT * FROM scores ORDER BY score DESC, id DESC LIMIT 10");
-	$query->setFetchMode(PDO::FETCH_ASSOC);
-	$status = $query->execute();
-	return send_response(TRUE, $query->fetchAll());
 }
 
 // RANK
