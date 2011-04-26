@@ -150,7 +150,7 @@ function conf($key, $value = NULL)
 	if ($value === NULL)
 	{
 		// allow "dot" syntax for nested params
-		if (strpos($key, '.'))
+		if (is_string($key) AND strpos($key, '.'))
 		{
 			$key = explode('.', $key);
 		}
@@ -306,6 +306,36 @@ function send_response($status, $data = array())
 //---------------------------------------
 //  MISC HELPERS
 //---------------------------------------
+
+function basic_auth($user = NULL)
+{
+	$basic_auth_headers = function($message) {
+		header('WWW-Authenticate: Basic realm="'.conf('auth.realm').'"');
+		header('HTTP/1.0 401 Unauthorized');
+		die($message);
+	};
+	
+	if ( ! isset($_SERVER['PHP_AUTH_USER'])) 
+	{
+		$basic_auth_headers('Please authorize.');
+	} 
+	else if ($user !== NULL AND $_SERVER['PHP_AUTH_USER'] != $user)
+	{
+		$basic_auth_headers('Permission denied.');
+	}
+	else
+	{
+		$password = conf(array('auth', 'accounts', $_SERVER['PHP_AUTH_USER']));
+		if (! $password OR arr($_SERVER, 'PHP_AUTH_PW') !=  $password)
+		{
+			$basic_auth_headers('Invalid username/password combination.');
+		}
+		else
+		{
+			return $_SERVER['PHP_AUTH_USER'];
+		}
+	}
+}
 
 function arr($array, $key, $default = NULL)
 {
