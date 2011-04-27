@@ -1,3 +1,5 @@
 Really tiny PHP framework for simple web services or microsites.
 
 Created as an exercise in doing things "the PHP way" (whatever the merits of that way might be.)
+
+PHP 5.3 only. In need of a better routing function (vanilla regex is not the way to go.)

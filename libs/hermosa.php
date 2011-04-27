@@ -6,7 +6,9 @@
  * Created as an exercise in doing things "the PHP way" 
  * (whatever the merits of that way might be.)
  * 
- * TODO: global error handler for live, routing with <variable> segments, caching helper
+ * Now with zany closure-based routing.
+ * 
+ * TODO: better routing syntax, session-based auth helper
  * 
  * @author Daniel Leavitt
  * @version $Id$
@@ -51,6 +53,7 @@ function run(array $settings)
 	// turn error reporting on if we're not live
 	error_reporting(E_ALL);
 	ini_set('display_errors', env() == 'local');
+	set_error_handler('handle_error');
 	
 	// set config items corresponding to current env
 	foreach (arr($settings, 'config', array()) as $conf_name => $conf_item)
@@ -58,9 +61,9 @@ function run(array $settings)
 		conf($conf_name, $conf_item);
 	}
 	
-	$method = strtoupper(arr($_REQUEST, '_method', $_SERVER['REQUEST_METHOD']));
+	$method = arr($_REQUEST, '_method', $_SERVER['REQUEST_METHOD']);
 	$path = arr($_GET, '_path', '/');
-	
+
 	$response = route($method, $path);
 	
 	if ($response !== FALSE)
@@ -76,14 +79,19 @@ function run(array $settings)
 }
 
 /**
- * Add a route 
+ * Add or retrieve a route.
+ * TODO: forget this static stuff and do it using conf()
  *
- * @return void
+ * @param string $method GET/POST/etc.
+ * @param string $url RegEx for the URL
+ * @param function $function handler for the route. If this is passed then we're creating a new route.
+ * @return mixed value returned by the route handler
  * @author Daniel Leavitt
  */
 function route($method, $url, $function = NULL)
 {
 	static $routes;
+	$method = strtoupper($method);
 	if ($function)
 	{
 		$routes[$method][$url] = $function;
@@ -173,14 +181,23 @@ function conf($key, $value = NULL)
 			{
 				return $conf[$key];
 			}
-			
 		}
-		
 	}
 	else
 	{
 		$conf[$key] = $value;
 	}
+}
+
+function handle_error($errno, $errstr, $errfile, $errline, array $errcontext)
+{
+	// error was suppressed with the @-operator
+    if (0 === error_reporting()) 
+	{
+		return false;
+	}
+
+	throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
 }
 
 //---------------------------------------
@@ -203,6 +220,16 @@ function pdo_connect()
 	return $pdo;
 }
 
+/**
+ * Simple DB-backed cache. Need a table named "cache" (configurable) with the following columns:
+ * - slug (string)
+ * - data (text)
+ * - expires (int)
+ *
+ * @param string $slug cache key
+ * @return mixed value of the key (deserialized) 
+ * @author Daniel Leavitt
+ */
 function cache_get($slug)
 {
 	$conf = conf('cache');
@@ -225,6 +252,15 @@ function cache_get($slug)
 	}
 }
 
+/**
+ * Set a cache item
+ *
+ * @param string $slug cache key
+ * @param mixed $data data to store - will be serialized
+ * @param int $lifetime number of seconds to cache for
+ * @return void
+ * @author Daniel Leavitt
+ */
 function cache_set($slug, $data, $lifetime = NULL)
 {
 	// could use some explicit error handling
@@ -248,6 +284,13 @@ function cache_set($slug, $data, $lifetime = NULL)
 	return $count;
 }
 
+/**
+ * Delete a cache item
+ *
+ * @param string $slug 
+ * @return void
+ * @author Daniel Leavitt
+ */
 function cache_delete($slug)
 {
 	$conf = conf('cache');
@@ -258,6 +301,45 @@ function cache_delete($slug)
 	$count = $query->execute(array($slug));
 	
 	return $count;
+}
+
+/**
+ * Requires a user to login (via basic auth.) Dies with a message if login fails.
+ * Pulls user/password data from the "auth.users" conf item.
+ * Pulls realm name from "auth.conf"
+ *
+ * @param string require this particular user
+ * @return string logged-in user
+ * @author Daniel Leavitt
+ */
+function basic_auth($user = NULL)
+{
+	$basic_auth_headers = function($message) {
+		header('WWW-Authenticate: Basic realm="'.conf('auth.realm').'"');
+		header('HTTP/1.0 401 Unauthorized');
+		die($message);
+	};
+
+	if ( ! isset($_SERVER['PHP_AUTH_USER']))
+	{
+		$basic_auth_headers('Please authorize.');
+	}
+	else if ($user !== NULL AND $_SERVER['PHP_AUTH_USER'] != $user)
+	{
+		$basic_auth_headers('Permission denied.');
+	}
+	else
+	{
+		$password = conf(array('auth', 'accounts', $_SERVER['PHP_AUTH_USER']));
+		if (! $password OR arr($_SERVER, 'PHP_AUTH_PW') !=  $password)
+		{
+			$basic_auth_headers('Invalid username/password combination.');
+		}
+		else
+		{
+			return $_SERVER['PHP_AUTH_USER'];
+		}
+	}
 }
 
 // TODO: Mail helper
@@ -307,41 +389,27 @@ function send_response($status, $data = array())
 //  MISC HELPERS
 //---------------------------------------
 
-function basic_auth($user = NULL)
-{
-	$basic_auth_headers = function($message) {
-		header('WWW-Authenticate: Basic realm="'.conf('auth.realm').'"');
-		header('HTTP/1.0 401 Unauthorized');
-		die($message);
-	};
-	
-	if ( ! isset($_SERVER['PHP_AUTH_USER'])) 
-	{
-		$basic_auth_headers('Please authorize.');
-	} 
-	else if ($user !== NULL AND $_SERVER['PHP_AUTH_USER'] != $user)
-	{
-		$basic_auth_headers('Permission denied.');
-	}
-	else
-	{
-		$password = conf(array('auth', 'accounts', $_SERVER['PHP_AUTH_USER']));
-		if (! $password OR arr($_SERVER, 'PHP_AUTH_PW') !=  $password)
-		{
-			$basic_auth_headers('Invalid username/password combination.');
-		}
-		else
-		{
-			return $_SERVER['PHP_AUTH_USER'];
-		}
-	}
-}
-
+/**
+ * Get an item from an array without throwing a warning if it doesn't exist
+ *
+ * @param array $array 
+ * @param mixed $key 
+ * @param mixed $default 
+ * @return mixed
+ * @author Daniel Leavitt
+ */
 function arr($array, $key, $default = NULL)
 {
 	return isset($array[$key]) ? $array[$key] : $default;
 }
 
+/**
+ * print_r wrapper
+ *
+ * @param mixed $var 
+ * @return void
+ * @author Daniel Leavitt
+ */
 function debug($var)
 {
 	echo '<pre>';

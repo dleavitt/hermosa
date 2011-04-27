@@ -6,6 +6,7 @@ RewriteEngine On
 
 # Hide .svn
 RewriteRule .*\.svn/.* - [F]
+RewriteRule .*\.git/.* - [F]
 
 # Protect hidden files from being viewed
 <Files .*>
